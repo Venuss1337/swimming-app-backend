@@ -1,10 +1,16 @@
 package main
 
 import (
+	"crypto/tls"
+	"encoding/json"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"net/http"
+	"testProject/database"
 	"testProject/encryption"
+	"time"
 )
 
 var argon encryption.Argon2id = encryption.Argon2id{
@@ -15,14 +21,23 @@ var argon encryption.Argon2id = encryption.Argon2id{
 	KeyLength:   64,
 }
 
-type RegUser struct {
+type User struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
-	Email    string `json:"email"`
 }
+type ResponseLogin struct {
+	RefreshToken string
+	AccessToken  string
+}
+type ResponeRefresh struct {
+	AccessToken string
+}
+
+var db database.Database
 
 func main() {
 	e := echo.New()
+	e.Pre(middleware.HTTPSNonWWWRedirect())
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.SecureWithConfig(middleware.SecureConfig{
@@ -34,49 +49,166 @@ func main() {
 	e.POST("/login", login)
 	e.POST("/register", register)
 	e.POST("/refresh", authMiddleware(refreshToken))
-	e.Logger.Fatal(e.Start(":8080"))
+
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+	server := &http.Server{
+		Addr:      ":8080",
+		Handler:   e,
+		TLSConfig: tlsConfig,
+	}
+
+	db = database.Database{}
+	err := db.Connect("mongodb://localhost:27017")
+	if err != nil {
+		return
+	}
+	println("Successfully connected to database")
+
+	println("Server started listening on :8080")
+	e.Logger.Fatal(server.ListenAndServeTLS("cert.pem", "key.pem"))
 }
+
 func refreshToken(c echo.Context) error {
-	if !c.IsTLS() {
-		return c.String(http.StatusUnauthorized, "Connection not secured.")
+	claims := c.Get("claims").(jwt.MapClaims)
+
+	if tokenType, ok := claims["typ"].(string); !ok || tokenType != "refresh" {
+		return c.JSON(http.StatusUnauthorized, "Invalid token")
 	}
-	var user RegUser
-	if err := c.Bind(&user); err != nil {
-		return c.String(http.StatusBadRequest, err.Error())
+	if nbf, ok := claims["nbf"].(float64); !ok || time.Now().Before(time.Unix(int64(nbf), 0)) {
+		return c.JSON(http.StatusUnauthorized, "Invalid token")
 	}
-	println(user.Username)
-	println(user.Password)
-	println(user.Email)
+	if exp, ok := claims["exp"].(float64); !ok || time.Now().After(time.Unix(int64(exp), 0)) {
+		return c.JSON(http.StatusUnauthorized, "Token expired")
+	}
+	if iss, ok := claims["iss"].(string); !ok || (iss != "swimply.pl/api/v2/register" && iss != "swimply.pl/api/v2/login") {
+		return c.JSON(http.StatusUnauthorized, "Invalid token")
+	}
+	if sub, ok := claims["sub"].(string); !ok || sub == "" {
+		return c.JSON(http.StatusUnauthorized, "Invalid token")
+	}
+	sub, err := bson.ObjectIDFromHex(claims["sub"].(string))
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, "Invalid token")
+	}
+
+	accessToken, err := encryption.CreateAccessToken(sub)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, err.Error())
+	}
+	c.Response().Header().Set("Content-Type", "application/json")
+	c.Response().WriteHeader(http.StatusOK)
+	b, err := json.Marshal(&ResponeRefresh{AccessToken: accessToken})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, err.Error())
+	}
+	if _, err := c.Response().Write(b); err != nil {
+		return err
+	}
 	return nil
 }
 func authMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		if !c.IsTLS() {
+			return echo.NewHTTPError(http.StatusBadRequest, "Connection not secured")
+		}
+		authHeader := c.Request().Header.Get("Authorization")
+		if authHeader == "" {
+			return echo.NewHTTPError(http.StatusUnauthorized, "Missing token")
+		}
+		tokenString, err := encryption.ParseJWT(authHeader)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token")
+		}
+		if _, ok := tokenString.Claims.(jwt.MapClaims); !ok || !tokenString.Valid {
+			return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token")
+		}
+		c.Set("claims", tokenString.Claims)
 		return next(c)
 	}
 }
 func login(c echo.Context) error {
 	if !c.IsTLS() {
-		return c.String(http.StatusUnauthorized, "Connection not secured.")
+		return c.Redirect(http.StatusBadRequest, "Connection not secured")
 	}
-	var user RegUser
+	var user User
 	if err := c.Bind(&user); err != nil {
+		return c.String(http.StatusBadRequest, "Invalid JSON")
+	}
+	retrievedHash, userId, err := db.RetrievePasswordHashAndId(user.Username)
+	if err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
 	}
-	println(user.Username)
-	println(user.Password)
-	println(user.Email)
+	if match, err := argon.Verify([]byte(user.Password), retrievedHash); err != nil {
+		return c.String(http.StatusBadRequest, "Something went wrong")
+	} else if !match {
+		return c.String(http.StatusBadRequest, "Invalid password")
+	}
+
+	refreshToken, err := encryption.CreateRefreshToken(userId)
+	if err != nil {
+		return c.String(http.StatusBadRequest, err.Error()+" tutaj")
+	}
+	accessToken, err := encryption.CreateAccessToken(userId)
+	if err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
+	responseJson := ResponseLogin{
+		RefreshToken: refreshToken,
+		AccessToken:  accessToken,
+	}
+	responeBytes, err := json.Marshal(responseJson)
+	if err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
+	c.Response().Header().Set(echo.HeaderContentType, "application/json")
+	c.Response().WriteHeader(http.StatusOK)
+	_, err = c.Response().Write(responeBytes)
+	if err != nil {
+		return err
+	}
 	return nil
 }
+
 func register(c echo.Context) error {
 	if !c.IsTLS() {
-		return c.String(http.StatusUnauthorized, "Connection not secured.")
+		return c.String(http.StatusBadRequest, "Connection not secured.")
 	}
-	var user RegUser
+	var user User
 	if err := c.Bind(&user); err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
 	}
-	println(user.Username)
-	println(user.Password)
-	println(user.Email)
-	return nil
+	var passwordHash string
+	if err := argon.Hash(&passwordHash, []byte(user.Password)); err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
+	if err := db.RegisterUser(user.Username, passwordHash); err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
+
+	// Disabled until I figure it out how to do this part to not call database 92834190382 times :)
+	/*refreshToken, err := encryption.CreateRefreshToken(userId)
+	if err != nil {
+		return c.String(http.StatusBadRequest, err.Error()+" tutaj")
+	}
+	accessToken, err := encryption.CreateAccessToken(userId)
+	if err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
+	responseJson := ResponseJson{
+		RefreshToken: refreshToken,
+		AccessToken:  accessToken,
+	}
+	responeBytes, err := json.Marshal(responseJson)
+	if err != nil {
+		return c.String(http.StatusBadRequest, err.Error())
+	}
+	c.Response().Header().Set(echo.HeaderContentType, "application/json")
+	c.Response().WriteHeader(http.StatusOK)
+	_, err = c.Response().Write(responeBytes)
+	if err != nil {
+		return err
+	}*/
+	return c.String(http.StatusOK, "Successfully registered user")
 }

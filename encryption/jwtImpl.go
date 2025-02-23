@@ -1,6 +1,9 @@
 package encryption
 
 import (
+	"crypto/x509"
+	"encoding/pem"
+	"errors"
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -11,36 +14,62 @@ import (
 func CreateRefreshToken(id bson.ObjectID) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
 		"sub": id,
-		"iss": "swaip.com/api/v2/refresh",
-		"exp": time.Now().Add(time.Minute * 30).Unix(),
+		"iss": "swimply.pl/api/v2/login",
+		"exp": time.Now().Add(time.Hour * 24 * 7).Unix(),
 		"iat": time.Now().Unix(),
 		"nbf": time.Now().Unix(),
-		"typ": "access",
+		"typ": "refresh",
 	})
 
-	privateKeyBytes, err := os.ReadFile("private.pem")
+	b, err := os.ReadFile("private.pem")
 	if err != nil {
 		return "", err
 	}
 
-	privateKey, err := jwt.ParseEdPrivateKeyFromPEM(privateKeyBytes)
+	block, _ := pem.Decode(b)
+	if block == nil || block.Type != "PRIVATE KEY" {
+		return "", errors.New("failed to decode PEM block containing private key")
+	}
+
+	privateKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+
 	if err != nil {
 		return "", err
 	}
 
 	return token.SignedString(privateKey)
 }
-func createAccessToken() (string, error) {
 
-	return "", nil
+func CreateAccessToken(id bson.ObjectID) (string, error) {
+
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
+		"sub": id,
+		"iss": "swimply.pl/api/v2/refresh",
+		"exp": time.Now().Add(time.Minute * 30).Unix(),
+		"iat": time.Now().Unix(),
+		"nbf": time.Now().Unix(),
+		"typ": "access",
+	})
+
+	privateKey, err := readPrivateFromFile()
+	if err != nil {
+		return "", err
+	}
+
+	return token.SignedString(privateKey)
 }
 
 func ParseJWT(tokenString string) (*jwt.Token, error) {
+	publicKey, err := readPublicFromFile()
+	if err != nil {
+		return nil, err
+	}
+
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodEd25519); !ok {
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
 		}
-		return token, nil
+		return publicKey, nil
 	})
 	if err != nil {
 		return nil, err

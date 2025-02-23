@@ -64,19 +64,19 @@ func decodeHash(encodedHash string) (argon *Argon2id, salt, hash []byte, err err
 	return argon, salt, hash, nil
 }
 
-func (argon *Argon2id) Hash(plain []byte) (string, error) {
+func (argon *Argon2id) Hash(cypher *string, plain []byte) error {
 	salt, err := generateSalt(argon.SaltLength)
 	if err != nil {
-		return "", err
+		return err
 	}
 	hash := argon2.IDKey(plain, salt, argon.Iterations, argon.Memory, argon.Parallelism, argon.KeyLength)
 
 	hash = []byte(base64.RawStdEncoding.EncodeToString(hash))
 	salt = []byte(base64.RawStdEncoding.EncodeToString(salt))
 
-	cypher := fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
+	*cypher = fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
 		argon2.Version, argon.Memory, argon.Iterations, argon.Parallelism, salt, hash)
-	return cypher, nil
+	return nil
 }
 
 func (argon *Argon2id) Verify(plain []byte, encoded string) (bool, error) {
