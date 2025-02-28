@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"testProject/database"
 	"testProject/encryption"
+	"testProject/model"
 	"time"
 )
 
@@ -21,10 +22,6 @@ var argon encryption.Argon2id = encryption.Argon2id{
 	KeyLength:   64,
 }
 
-type User struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
 type ResponseLogin struct {
 	RefreshToken string
 	AccessToken  string
@@ -46,6 +43,16 @@ func main() {
 		XFrameOptions:      "SAMEORIGIN",
 		HSTSMaxAge:         86400,
 	}))
+	/*
+			{
+				"username":"veanut",
+				"password":"pass123",
+				"email":"example@gmail.com"
+			}
+
+		  0l3CsTZ2pfdVOkuQdA2HhvHWfICj05ZGRTECjyHAPTHCoVPQEioR+qSQVz3JcMUfd5VKbDaH4Hzd8DKQuFsd/vidfoJikMn7HdqI87nNA5bYEnzScGhqTN4d01JcpTQ+yTfFzOsGqzenuEPVFLm/J0dj7gpYXad9+wR+YsATe/gMY1HEqz1gl1BhvKvz86r7ROBNXpJL0mxfdeU6X8oMBLdZYxahX2UDbSPAaEx4KrJkEmjHaOqrgUgZJpzcVNkawUZcf/Ybb0LyuOu25PoY/ibZwAavZbz/xj2jtFMiJgVGk491oDxlgmA0jHY//uSI0ZbNKhaxHaensSEECUq1lYwOmHyS0XDD311zS74UHrVFN6IUsNfEaekdNRaE+O3S4lJDCiWrggppIemcHyOHvFwKtYoTUq4CrDHJ6ucihOIGQrdmPwEhsgXq
+
+	*/
 	e.POST("/login", login)
 	e.POST("/register", register)
 	e.POST("/refresh", authMiddleware(refreshToken))
@@ -74,26 +81,32 @@ func refreshToken(c echo.Context) error {
 	claims := c.Get("claims").(jwt.MapClaims)
 
 	if tokenType, ok := claims["typ"].(string); !ok || tokenType != "refresh" {
-		return c.JSON(http.StatusUnauthorized, "Invalid token")
+		return c.JSON(http.StatusUnauthorized, "Invalid token7")
 	}
 	if nbf, ok := claims["nbf"].(float64); !ok || time.Now().Before(time.Unix(int64(nbf), 0)) {
-		return c.JSON(http.StatusUnauthorized, "Invalid token")
+		return c.JSON(http.StatusUnauthorized, "Invalid token8")
 	}
 	if exp, ok := claims["exp"].(float64); !ok || time.Now().After(time.Unix(int64(exp), 0)) {
 		return c.JSON(http.StatusUnauthorized, "Token expired")
 	}
 	if iss, ok := claims["iss"].(string); !ok || (iss != "swimply.pl/api/v2/register" && iss != "swimply.pl/api/v2/login") {
-		return c.JSON(http.StatusUnauthorized, "Invalid token")
+		return c.JSON(http.StatusUnauthorized, "Invalid token9")
 	}
 	if sub, ok := claims["sub"].(string); !ok || sub == "" {
-		return c.JSON(http.StatusUnauthorized, "Invalid token")
+		return c.JSON(http.StatusUnauthorized, "Invalid token10")
 	}
 	sub, err := bson.ObjectIDFromHex(claims["sub"].(string))
 	if err != nil {
-		return c.JSON(http.StatusUnauthorized, "Invalid token")
+		return c.JSON(http.StatusUnauthorized, "Invalid token11")
 	}
 
-	accessToken, err := encryption.CreateAccessToken(sub)
+	accessToken, err := encryption.CreateToken(sub, map[string]interface{}{
+		"iss": "swimply.pl/api/v2/refresh-token",
+		"exp": time.Now().Add(time.Minute * 30).Unix(),
+		"iat": time.Now().Unix(),
+		"nbf": time.Now().Unix(),
+		"typ": "access",
+	})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
@@ -119,10 +132,10 @@ func authMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 		tokenString, err := encryption.ParseJWT(authHeader)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token")
+			return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token1")
 		}
 		if _, ok := tokenString.Claims.(jwt.MapClaims); !ok || !tokenString.Valid {
-			return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token")
+			return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token2")
 		}
 		c.Set("claims", tokenString.Claims)
 		return next(c)
@@ -130,9 +143,9 @@ func authMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 }
 func login(c echo.Context) error {
 	if !c.IsTLS() {
-		return c.Redirect(http.StatusBadRequest, "Connection not secured")
+		return c.String(http.StatusBadRequest, "Connection not secured")
 	}
-	var user User
+	var user model.User
 	if err := c.Bind(&user); err != nil {
 		return c.String(http.StatusBadRequest, "Invalid JSON")
 	}
@@ -146,11 +159,23 @@ func login(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid password")
 	}
 
-	refreshToken, err := encryption.CreateRefreshToken(userId)
+	refreshToken, err := encryption.CreateToken(userId, map[string]interface{}{
+		"iss": "swimply.pl/api/v2/login",
+		"exp": time.Now().Add(time.Hour * 24 * 7).Unix(),
+		"iat": time.Now().Unix(),
+		"nbf": time.Now().Unix(),
+		"typ": "refresh",
+	})
 	if err != nil {
-		return c.String(http.StatusBadRequest, err.Error()+" tutaj")
+		return c.String(http.StatusBadRequest, err.Error())
 	}
-	accessToken, err := encryption.CreateAccessToken(userId)
+	accessToken, err := encryption.CreateToken(userId, map[string]interface{}{
+		"iss": "swimply.pl/api/v2/login",
+		"exp": time.Now().Add(time.Minute * 30).Unix(),
+		"iat": time.Now().Unix(),
+		"nbf": time.Now().Unix(),
+		"typ": "access",
+	})
 	if err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
 	}
@@ -175,7 +200,7 @@ func register(c echo.Context) error {
 	if !c.IsTLS() {
 		return c.String(http.StatusBadRequest, "Connection not secured.")
 	}
-	var user User
+	var user model.User
 	if err := c.Bind(&user); err != nil {
 		return c.String(http.StatusBadRequest, err.Error())
 	}
