@@ -43,16 +43,7 @@ func main() {
 		XFrameOptions:      "SAMEORIGIN",
 		HSTSMaxAge:         86400,
 	}))
-	/*
-			{
-				"username":"veanut",
-				"password":"pass123",
-				"email":"example@gmail.com"
-			}
 
-		  
-
-	*/
 	e.POST("/login", login)
 	e.POST("/register", register)
 	e.POST("/refresh", authMiddleware(refreshToken))

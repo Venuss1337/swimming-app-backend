@@ -12,7 +12,7 @@ import (
 )
 
 func DecryptAES(plain string) (string, error) {
-	if err := godotenv.Load("secret.env"); err != nil {
+	if err := godotenv.Load(".env"); err != nil {
 		panic(err)
 	}
 
@@ -43,7 +43,7 @@ func DecryptAES(plain string) (string, error) {
 	return string(decryptedBytes), nil
 }
 func EncryptAES(plain string) (string, error) {
-	if err := godotenv.Load("secret.env"); err != nil {
+	if err := godotenv.Load(".env"); err != nil {
 		panic(err)
 	}
 
