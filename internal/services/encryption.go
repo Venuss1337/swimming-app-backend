@@ -1,4 +1,4 @@
-package encryption
+package services
 
 import (
 	"crypto/aes"
@@ -9,14 +9,15 @@ import (
 	"github.com/joho/godotenv"
 	"io"
 	"os"
+	"testProject/pkg/utils"
 )
 
-func DecryptAES(plain string) (string, error) {
-	if err := godotenv.Load(".env"); err != nil {
+func DecryptJWT(token string, refresh bool) (string, error) {
+	if err := godotenv.Load(); err != nil {
 		panic(err)
 	}
 
-	key, err := hex.DecodeString(os.Getenv("JWT_SEC_NONCE"))
+	key, err := hex.DecodeString(utils.If(refresh, os.Getenv("JWT_REFRESH_SECRET"), os.Getenv("JWT_ACCESS_SECRET")))
 	if err != nil {
 		return "", err
 	}
@@ -26,7 +27,7 @@ func DecryptAES(plain string) (string, error) {
 		return "", err
 	}
 
-	encryptedBytes, err := base64.RawStdEncoding.DecodeString(plain)
+	encryptedBytes, err := base64.RawStdEncoding.DecodeString(token)
 	if err != nil {
 		return "", err
 	}
@@ -42,12 +43,12 @@ func DecryptAES(plain string) (string, error) {
 	}
 	return string(decryptedBytes), nil
 }
-func EncryptAES(plain string) (string, error) {
-	if err := godotenv.Load(".env"); err != nil {
+func EncryptJWT(token string, refresh bool) (string, error) {
+	if err := godotenv.Load(); err != nil {
 		panic(err)
 	}
 
-	key, err := hex.DecodeString(os.Getenv("JWT_SEC_NONCE"))
+	key, err := hex.DecodeString(utils.If(refresh, os.Getenv("JWT_REFRESH_SECRET"), os.Getenv("JWT_ACCESS_SECRET")))
 	if err != nil {
 		return "", err
 	}
@@ -66,7 +67,7 @@ func EncryptAES(plain string) (string, error) {
 	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
 		return "", err
 	}
-	encryptedBytes := gcm.Seal(nonce, nonce, []byte(plain), nil)
+	encryptedBytes := gcm.Seal(nonce, nonce, []byte(token), nil)
 
 	return base64.StdEncoding.EncodeToString(encryptedBytes), nil
 }

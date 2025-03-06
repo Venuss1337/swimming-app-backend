@@ -1,4 +1,4 @@
-package encryption
+package utils
 
 import (
 	"crypto/rand"
@@ -16,6 +16,12 @@ type Argon2id struct {
 	Parallelism uint8
 	SaltLength  uint32
 	KeyLength   uint32
+}
+
+var Argon *Argon2id
+
+func InitConfig(argon2id *Argon2id) {
+	Argon = argon2id
 }
 
 func generateSalt(length uint32) ([]byte, error) {
@@ -79,15 +85,15 @@ func (argon *Argon2id) Hash(cypher *string, plain []byte) error {
 	return nil
 }
 
-func (argon *Argon2id) Verify(plain []byte, encoded string) (bool, error) {
+func (argon *Argon2id) Verify(plain []byte, encoded string) error {
 	decodedArgon, decodedSalt, decodedHash, err := decodeHash(encoded)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	newHash := argon2.IDKey(plain, decodedSalt, decodedArgon.Iterations, decodedArgon.Memory, decodedArgon.Parallelism, decodedArgon.KeyLength)
 	if subtle.ConstantTimeCompare(newHash, decodedHash) == 1 {
-		return true, nil
+		return nil
 	}
-	return false, nil
+	return errors.New("invalid username or password")
 }

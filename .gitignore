@@ -20,8 +20,5 @@ go.work.sum
 
 # env file
 .env
-/public.pem
-/private.pem
-/key.pem
-/cert.pem
+/secrets/*.*
 /testProject
