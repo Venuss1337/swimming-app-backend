@@ -35,15 +35,12 @@ func (DB *DB) GetUserByName(username string) (models.User, error) {
 	if err := result.Decode(&user); err != nil { return models.NilUser, err }
 	return user, nil
 }
-func (DB *DB) Exists(username string, email string) (bool, error) {
+func (DB *DB) Exists(username string) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
 
     filter := bson.M{
-        "$or": []bson.M{
-            {"email": email},
-            {"username": username},
-        },
+		"username": username,
     }
 
 	var result models.User
@@ -56,11 +53,11 @@ func (DB *DB) Exists(username string, email string) (bool, error) {
 	}
 	return true, nil
 }
-func (DB *DB) NewUser(id bson.ObjectID, username string, email string, password string) error {
+func (DB *DB) NewUser(id bson.ObjectID, username string, password string, weight int, isMale bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	user := models.User{Id: id, Username: username, Email: email, Password: password}
+	user := models.User{Id: id, Username: username, Password: password, Weight: weight, IsMale: isMale };
 
 	_, err := DB.Db.Collection("users").InsertOne(ctx, user)
 	if err != nil { return err }

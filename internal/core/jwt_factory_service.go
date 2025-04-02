@@ -1,10 +1,10 @@
 package core
 
 import (
-	"errors"
-	"fmt"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"net/http"
 	"time"
 )
 
@@ -31,7 +31,7 @@ func (j *JWTTokens) NewToken(id bson.ObjectID, iss string, access bool) (string,
 func (j *JWTTokens) ParseToken(token string, access bool) (*jwt.MapClaims, error) {
 	parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodEd25519); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			return nil, &echo.HTTPError{Code: http.StatusUnauthorized, Message: "invalid token"}
 		}
 		return If(access, Ed25519Keys.AccessPublicKey, Ed25519Keys.RefreshPublicKey), nil
 	})
@@ -43,22 +43,22 @@ func (j *JWTTokens) ParseToken(token string, access bool) (*jwt.MapClaims, error
 		ok     bool
 	)
 	if claims, ok = parsedToken.Claims.(jwt.MapClaims); !ok || !parsedToken.Valid {
-		return nil, errors.New("invalid token")
+		return nil, &echo.HTTPError{Code: http.StatusUnauthorized, Message: "invalid token"}
 	}
 	return &claims, nil
 }
 func (j *JWTTokens) VerifyClaims(claims *jwt.MapClaims, access bool) error {
 	if iss, err := claims.GetIssuer(); err != nil || If(access, iss != "https://auth.swimply.pl/refresh-token" && iss != "https://auth.swimply.pl/signin", iss != "https://auth.swimply.pl/signin") {
-		return errors.New("invalid token")
+		return &echo.HTTPError{Code: http.StatusUnauthorized, Message: "invalid token"}
 	}
 	if iat, err := claims.GetIssuedAt(); err != nil || (iat.Unix() >= time.Now().Unix()) {
-		return errors.New("invalid token")
+		return &echo.HTTPError{Code: http.StatusUnauthorized, Message: "invalid token"}
 	}
 	if exp, err := claims.GetExpirationTime(); err != nil || exp.Unix() < time.Now().Unix() {
-		return errors.New("token expired")
+		return &echo.HTTPError{Code: http.StatusPreconditionRequired, Message: "invalid token"}
 	}
 	if _, err := claims.GetSubject(); err != nil {
-		return errors.New("invalid token")
+		return &echo.HTTPError{Code: http.StatusUnauthorized, Message: "invalid token"}
 	}
 	return nil
 }

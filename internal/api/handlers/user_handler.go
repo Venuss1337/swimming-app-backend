@@ -14,7 +14,7 @@ import (
 func (h *Handler) SignUp(c echo.Context) error {
 	user := c.Get("user").(models.User)
 
-	if userExists, err := h.DB.Exists(user.Username, user.Email); err != nil || userExists {
+	if userExists, err := h.DB.Exists(user.Username); err != nil || userExists {
 		return &echo.HTTPError{Code: http.StatusBadRequest, Message: "user already exists"}
 	}
 
@@ -23,17 +23,19 @@ func (h *Handler) SignUp(c echo.Context) error {
 		return &echo.HTTPError{Code: http.StatusInternalServerError, Message: "hashing failed"}
 	}
 
-	if err := h.DB.NewUser(user.Id, user.Username, user.Email, hash); err != nil {
+	if err := h.DB.NewUser(user.Id, user.Username, hash, user.Weight, user.IsMale); err != nil {
 		return &echo.HTTPError{Code: http.StatusInternalServerError, Message: "user not created"}
 	}
 	user.Password = ""
+	user.Weight = 0
+	user.IsMale = false
 
 	return c.JSON(http.StatusCreated, user)
 }
 func (h *Handler) SignIn(c echo.Context) error {
 	user := c.Get("user").(models.User)
 
-	if userExists, err := h.DB.Exists(user.Username, user.Email); err != nil || !userExists {
+	if userExists, err := h.DB.Exists(user.Username); err != nil || !userExists {
 		return &echo.HTTPError{Code: http.StatusNotFound, Message: "invalid user or password"}
 	}
 
@@ -46,7 +48,9 @@ func (h *Handler) SignIn(c echo.Context) error {
 		return &echo.HTTPError{Code: http.StatusUnauthorized, Message: "invalid user or password"}
 	}
 	user.Password = ""
-	user.Email = ""
+	user.Weight = 0
+	user.IsMale = false
+
 
 	rawAccessToken, err := core.JWTFactory.NewToken(user.Id, "https://auth.swimply.pl/signin", true)
 	rawRefreshToken, err := core.JWTFactory.NewToken(user.Id, "https://auth.swimply.pl/signin", false)
@@ -71,7 +75,18 @@ func (h *Handler) SignIn(c echo.Context) error {
 	user.Id = dbUser.Id
 	return c.JSON(http.StatusOK, user)
 }
-
+func (h *Handler) GetAccountInfo(c echo.Context) error {
+	user := c.Get("user").(models.User)
+	if userExists, err := h.DB.Exists(user.Username); err != nil || !userExists {
+		return &echo.HTTPError{Code: http.StatusNotFound, Message: "user not found"}
+	}
+	dbUser, err := h.DB.GetUserByName(user.Username)
+	if err != nil {
+		return &echo.HTTPError{Code: http.StatusNotFound, Message: "user not found"}
+	}
+	dbUser.Password = ""
+	return c.JSON(http.StatusOK, dbUser)
+}
 func (h *Handler) RefreshToken(c echo.Context) error {
 	user := c.Get("user").(*models.User)
 

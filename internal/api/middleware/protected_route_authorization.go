@@ -62,12 +62,12 @@ func JWTAccessAuth(next echo.HandlerFunc) echo.HandlerFunc {
 			found = false
 		)
 		if after, found = strings.CutPrefix(c.Request().Header.Get("Authorization"), "Bearer "); after == "" || !found {
-			return &echo.HTTPError{Code: http.StatusForbidden, Message: "invalid token"}
+			return &echo.HTTPError{Code: http.StatusUnauthorized, Message: "invalid token"}
 		}
 
 		decodedToken, err := base64.StdEncoding.DecodeString(after)
 		if err != nil {
-			return &echo.HTTPError{Code: http.StatusForbidden, Message: "invalid token"}
+			return &echo.HTTPError{Code: http.StatusUnauthorized, Message: "invalid token"}
 		}
 
 		key, err := hex.DecodeString(os.Getenv("JWT_ACCESS_SECRET"))
@@ -77,21 +77,21 @@ func JWTAccessAuth(next echo.HandlerFunc) echo.HandlerFunc {
 
 		decryptedToken, err := core.JWTEncrypter.Decrypt(decodedToken, key)
 		if err != nil {
-			return &echo.HTTPError{Code: http.StatusForbidden, Message: "encryption failed"}
+			return &echo.HTTPError{Code: http.StatusUnauthorized, Message: "invalid token"}
 		}
 		claims, err := core.JWTFactory.ParseToken(string(decryptedToken), true)
 		if err != nil {
-			return &echo.HTTPError{Code: http.StatusForbidden, Message: err.Error()}
+			return &echo.HTTPError{Code: http.StatusUnauthorized, Message: "invalid token"}
 		}
 
 		if err := core.JWTFactory.VerifyClaims(claims, true); err != nil {
-			return &echo.HTTPError{Code: http.StatusBadRequest, Message: err.Error()}
+			return err
 		}
 
 		userId, _ := claims.GetSubject()
 		rawUserId, err := bson.ObjectIDFromHex(userId)
 		if err != nil {
-			return &echo.HTTPError{Code: http.StatusForbidden, Message: err.Error()}
+			return &echo.HTTPError{Code: http.StatusUnauthorized, Message: "invalid token"}
 		}
 
 		c.Set("user", &models.User{Id: rawUserId})

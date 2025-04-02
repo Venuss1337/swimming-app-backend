@@ -14,7 +14,7 @@ func UserAuth(next echo.HandlerFunc) echo.HandlerFunc {
 		var user models.User = models.User{Id: userId }
 		if err := c.Bind(&user); err != nil { return c.JSON(http.StatusBadRequest, "invalid json body") }
 
-		if user.Username == "" || user.Password == "" || user.Email == "" { return c.JSON(http.StatusBadRequest, "missing username or password") }
+		if user.Username == "" || user.Password == "" { return c.JSON(http.StatusBadRequest, "missing username or password") }
 		c.Set("user", user)
 		return next(c)
 	}

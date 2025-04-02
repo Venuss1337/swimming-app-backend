@@ -1,4 +1,4 @@
-package testProject
+package main
 
 import (
 	"github.com/labstack/echo/v4"
@@ -29,7 +29,7 @@ func main() {
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{"*"},
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderAuthorization, echo.HeaderContentType, echo.HeaderAccept},
-		AllowMethods: []string{http.MethodGet, http.MethodHead, http.MethodPut, http.MethodPatch, http.MethodPost, http.MethodDelete},
+		AllowMethods: []string{http.MethodGet, http.MethodHead, http.MethodPut, http.MethodPatch, http.MethodPost},
 	}))
 	e.Use(middleware.SecureWithConfig(middleware.SecureConfig{
 		XSSProtection:      "1; mode=block",
@@ -37,7 +37,6 @@ func main() {
 		ContentTypeNosniff: "nosniff",
 		HSTSMaxAge:         3600,
 	}))
-	e.Use(middleware.RateLimiterWithConfig(middleware.DefaultRateLimiterConfig))
 	e.Use(middleware.BodyLimit("1M"))
 
 	h := handlers.NewHandler(&db)
@@ -46,6 +45,7 @@ func main() {
 	e.POST("/refresh-token", imiddleware.JWTRefreshAuth(h.RefreshToken))
 	e.POST("/api/v2/workouts/new", imiddleware.JWTAccessAuth(h.NewWorkout))
 	e.GET("/api/v2/workouts", imiddleware.JWTAccessAuth(h.GetWorkout))
+	e.GET("/api/v2/account/info", imiddleware.JWTAccessAuth(h.GetAccountInfo))
 
 	e.Logger.Fatal(e.Start(":8080"))
 }
