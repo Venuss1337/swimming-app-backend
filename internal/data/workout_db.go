@@ -1,12 +1,13 @@
 package database
-import (
 
-"context"
-"go.mongodb.org/mongo-driver/v2/bson"
+import 
+	"context"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"time"
 "time"
 )
 
-func (DB *DB) GetAllWorkouts(userId bson.ObjectID) (bson.M, error) {
+func (DB *DB) GetAllWorkouts(userId bson.ObjectID) (map[string]interface{}, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -14,7 +15,7 @@ func (DB *DB) GetAllWorkouts(userId bson.ObjectID) (bson.M, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := bson.M{}
+	result := map[string]interface{}{}
 	err = find.Decode(&result)
 	if err != nil {
 		return nil, err
@@ -67,5 +68,6 @@ func (DB *DB) SaveWorkout(userId bson.ObjectID, workout map[string]interface{}) 
 			"time":"12:35"
 		}
 	]
-}
+*/
+
  */

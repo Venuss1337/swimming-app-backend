@@ -3,6 +3,8 @@ package main
 import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"log"
 	"net/http"
 	"testProject/internal/api/handlers"
 	imiddleware "testProject/internal/api/middleware"
@@ -47,5 +49,9 @@ func main() {
 	e.GET("/api/v2/workouts", imiddleware.JWTAccessAuth(h.GetWorkout))
 	e.GET("/api/v2/account/info", imiddleware.JWTAccessAuth(h.GetAccountInfo))
 
+	testId, _ := bson.ObjectIDFromHex("67ed678c23c645e03efe21f0")
+
+	wrkts, _ := h.DB.GetAllWorkouts(testId)
+	log.Println(wrkts)
 	e.Logger.Fatal(e.Start(":8080"))
 }
