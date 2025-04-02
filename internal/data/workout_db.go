@@ -1,10 +1,9 @@
 package database
 
-import 
+import (
 	"context"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"time"
-"time"
 )
 
 func (DB *DB) GetAllWorkouts(userId bson.ObjectID) (map[string]interface{}, error) {
@@ -69,5 +68,3 @@ func (DB *DB) SaveWorkout(userId bson.ObjectID, workout map[string]interface{}) 
 		}
 	]
 */
-
- */
