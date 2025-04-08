@@ -23,12 +23,13 @@ func (h *Handler) SignUp(c echo.Context) error {
 		return &echo.HTTPError{Code: http.StatusInternalServerError, Message: "hashing failed"}
 	}
 
-	if err := h.DB.NewUser(user.Id, user.Username, hash, user.Weight, user.IsMale); err != nil {
+	if err := h.DB.NewUser(user.Id, user.Username, hash, user.Weight, user.IsMale, user.CaloriesGoal); err != nil {
 		return &echo.HTTPError{Code: http.StatusInternalServerError, Message: "user not created"}
 	}
 	user.Password = ""
 	user.Weight = 0
 	user.IsMale = false
+	user.CaloriesGoal = 0
 
 	return c.JSON(http.StatusCreated, user)
 }
@@ -50,10 +51,10 @@ func (h *Handler) SignIn(c echo.Context) error {
 	user.Password = ""
 	user.Weight = 0
 	user.IsMale = false
+	user.CaloriesGoal = 0
 
-
-	rawAccessToken, err := core.JWTFactory.NewToken(user.Id, "https://auth.swimply.pl/signin", true)
-	rawRefreshToken, err := core.JWTFactory.NewToken(user.Id, "https://auth.swimply.pl/signin", false)
+	rawAccessToken, err := core.JWTFactory.NewToken(dbUser.Id, "https://auth.swimply.pl/signin", true)
+	rawRefreshToken, err := core.JWTFactory.NewToken(dbUser.Id, "https://auth.swimply.pl/signin", false)
 	if err != nil {
 		return &echo.HTTPError{Code: http.StatusUnauthorized, Message: "error signing token"}
 	}
@@ -76,8 +77,8 @@ func (h *Handler) SignIn(c echo.Context) error {
 	return c.JSON(http.StatusOK, user)
 }
 func (h *Handler) GetAccountInfo(c echo.Context) error {
-	user := c.Get("user").(models.User)
-	if userExists, err := h.DB.Exists(user.Username); err != nil || !userExists {
+	user := c.Get("user").(*models.User)
+	if userExists, err := h.DB.ExistsID(user.Id); err != nil || !userExists {
 		return &echo.HTTPError{Code: http.StatusNotFound, Message: "user not found"}
 	}
 	dbUser, err := h.DB.GetUserByName(user.Username)
@@ -85,8 +86,25 @@ func (h *Handler) GetAccountInfo(c echo.Context) error {
 		return &echo.HTTPError{Code: http.StatusNotFound, Message: "user not found"}
 	}
 	dbUser.Password = ""
+
 	return c.JSON(http.StatusOK, dbUser)
 }
+func (h* Handler) ChangeAccountInfo(c echo.Context) error {
+	user := c.Get("user").(*models.User)
+
+	if userExists, err := h.DB.ExistsID(user.Id); err != nil || !userExists {
+		return &echo.HTTPError{Code: http.StatusNotFound, Message: "user not found"}
+	}
+	if err := c.Bind(&user); err != nil {
+		return &echo.HTTPError{Code: http.StatusBadRequest, Message: err}
+	}
+	err := h.DB.UpdateAccountInfo(user.Id, user.Weight, user.IsMale, user.CaloriesGoal);
+	if err != nil {
+		return &echo.HTTPError{Code: http.StatusBadRequest, Message: err}
+	}
+	return &echo.HTTPError{Code: http.StatusOK, Message: "user updated"}
+}
+
 func (h *Handler) RefreshToken(c echo.Context) error {
 	user := c.Get("user").(*models.User)
 

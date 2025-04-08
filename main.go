@@ -45,8 +45,10 @@ func main() {
 	e.POST("/signup", imiddleware.UserAuth(h.SignUp))
 	e.POST("/sign-in", imiddleware.UserAuth(h.SignIn))
 	e.POST("/refresh-token", imiddleware.JWTRefreshAuth(h.RefreshToken))
-	e.POST("/api/v2/workouts/new", imiddleware.JWTAccessAuth(h.NewWorkout))
-	e.GET("/api/v2/workouts", imiddleware.JWTAccessAuth(h.GetWorkout))
+	e.POST("/api/v2/workout", imiddleware.JWTAccessAuth(h.NewWorkout))
+	e.GET("/api/v2/workout", imiddleware.JWTAccessAuth(h.GetWorkout))
+	e.DELETE("/api/v2/workout", imiddleware.JWTAccessAuth(h.DeleteWorkout))
+	e.PUT("/api/v2/workout", imiddleware.JWTAccessAuth(h.ChangeWorkout))
 	e.GET("/api/v2/account/info", imiddleware.JWTAccessAuth(h.GetAccountInfo))
 
 	testId, _ := bson.ObjectIDFromHex("67ed678c23c645e03efe21f0")

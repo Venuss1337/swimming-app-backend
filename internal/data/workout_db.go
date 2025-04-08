@@ -15,11 +15,29 @@ func (DB *DB) GetAllWorkouts(userId bson.ObjectID) (map[string]interface{}, erro
 		return nil, err
 	}
 	result := map[string]interface{}{}
-	err = find.Decode(&result)
+	err = find.All(ctx, &result)
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
+}
+func (DB *DB) UpdateWorkout(userID bson.ObjectID, updatedWorkout map[string]interface{}) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	filter := bson.M{"user_id": userID}
+	update := bson.M{"$set": updatedWorkout}
+
+	_, err := DB.Db.Collection("workouts").UpdateOne(ctx, filter, update);
+	return err
+}
+func (DB *DB) DeleteWorkout(userId bson.ObjectID, workoutId string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	filter := bson.M{"user_id": userId, "workout": bson.M{"id": workoutId}}
+	_, err := DB.Db.Collection("workouts").DeleteOne(ctx, filter)
+	return err
 }
 func (DB *DB) SaveWorkout(userId bson.ObjectID, workout map[string]interface{}) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
